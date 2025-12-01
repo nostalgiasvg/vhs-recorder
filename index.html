@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VHS Recorder</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier Prime', monospace;
+            background: #1a1a1a;
+            color: #fff;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Main container */
+        .container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* Video preview */
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        /* VHS Effects */
+        @keyframes scanlines {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(4px); }
+        }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(transparent 50%, rgba(0, 0, 0, 0.4) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            animation: scanlines 8s linear infinite;
+            z-index: 10;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.95; }
+            50% { opacity: 1; }
+            100% { opacity: 0.95; }
+        }
+
+        .flicker {
+            animation: flicker 0.1s infinite;
+        }
+
+        @keyframes noise {
+            0%, 100% { transform: translate(0, 0); }
+            10% { transform: translate(-5%, -5%); }
+            20% { transform: translate(-10%, 5%); }
+            30% { transform: translate(5%, -10%); }
+            40% { transform: translate(-5%, 15%); }
+            50% { transform: translate(-10%, 5%); }
+            60% { transform: translate(15%, 0); }
+            70% { transform: translate(0, 10%); }
+            80% { transform: translate(-15%, 0); }
+            90% { transform: translate(10%, 5%); }
+        }
+
+        .noise {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            right: -50%;
+            bottom: -50%;
+            background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.15"/></svg>');
+            animation: noise 0.2s infinite;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes tracking {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .tracking-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: tracking 3s linear infinite;
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        /* Status overlay */
+        .status-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .status-overlay.active {
+            display: flex;
+        }
+
+        .countdown {
+            font-size: 120px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        /* REC indicator */
+        .rec-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            color: #E75454;
+            z-index: 20;
+        }
+
+        .rec-indicator.active {
+            display: flex;
+        }
+
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+
+        .rec-dot {
+            width: 12px;
+            height: 12px;
+            background: #E75454;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        /* Timer */
+        .timer {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #fff;
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            display: none;
+            z-index: 20;
+        }
+
+        .timer.active {
+            display: block;
+        }
+
+        /* Bottom controls */
+        .controls {
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 2px solid #fff;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        button {
+            background: #fff;
+            border: none;
+            color: #1a1a1a;
+            padding: 16px 48px;
+            font-family: 'Courier Prime', monospace;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.stop {
+            background: #E75454;
+            color: #fff;
+        }
+
+        button.stop:hover {
+            box-shadow: 0 0 20px rgba(231, 84, 84, 0.5);
+        }
+
+        button.active {
+            background: #fff;
+            color: #1a1a1a;
+        }
+
+        /* Loading state */
+        .loading-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            z-index: 200;
+        }
+
+        .loading-message.hidden {
+            display: none;
+        }
+
+        /* Camera permission message */
+        .permission-message {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .permission-message h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .permission-message p {
+            font-size: 12px;
+            opacity: 0.7;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-wrapper">
+            <canvas id="canvas"></canvas>
+            
+            <!-- VHS Effects -->
+            <div class="scanlines"></div>
+            <div class="noise"></div>
+            <div class="tracking-lines"></div>
+            
+            <!-- Countdown overlay -->
+            <div class="status-overlay" id="countdownOverlay">
+                <div class="countdown" id="countdownText">3</div>
+            </div>
+            
+            <!-- REC indicator -->
+            <div class="rec-indicator" id="recIndicator">
+                <div class="rec-dot"></div>
+                <span>REC</span>
+            </div>
+            
+            <!-- Timer -->
+            <div class="timer" id="timer">00:00</div>
+            
+            <!-- Loading message -->
+            <div class="loading-message" id="loadingMessage">
+                <p>INITIALIZING CAMERA...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom controls -->
+    <div class="controls">
+        <button id="recordBtn" onclick="handleRecord()" disabled>
+            ● REC
+        </button>
+    </div>
+
+    <video id="video" style="display: none;" autoplay playsinline muted></video>
+
+    <script>
+        // VHS preset settings
+        const VHS_SETTINGS = {
+            rgbSplit: 5,
+            brightness: 1.1,
+            contrast: 0.9,
+            saturation: 1.6
+        };
+
+        let stream = null;
+        let animationFrame = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
+        let recordingStartTime = 0;
+        let timerInterval = null;
+        let audioContext = null;
+        let processedStream = null;
+        const MAX_DURATION = 30000; // 30 seconds in milliseconds
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const recordBtn = document.getElementById('recordBtn');
+        const loadingMessage = document.getElementById('loadingMessage');
+
+        // Start camera on load
+        window.addEventListener('load', startCamera);
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 48000
+                    }
+                });
+
+                // Process audio with Web Audio API
+                processedStream = await processAudio(stream);
+                
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play().then(() => {
+                        loadingMessage.classList.add('hidden');
+                        recordBtn.disabled = false;
+                        renderLoop();
+                    });
+                };
+            } catch (err) {
+                console.error('Camera error:', err);
+                loadingMessage.innerHTML = '<p>CAMERA ACCESS DENIED</p><p style="margin-top: 10px; font-size: 11px;">Please allow camera and microphone access</p>';
+            }
+        }
+
+        async function processAudio(inputStream) {
+            // Create audio context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Get audio track
+            const audioTrack = inputStream.getAudioTracks()[0];
+            const source = audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
+            
+            // Create audio processing chain
+            
+            // 1. High-pass filter (remove rumble below 80Hz)
+            const highPassFilter = audioContext.createBiquadFilter();
+            highPassFilter.type = 'highpass';
+            highPassFilter.frequency.value = 80;
+            highPassFilter.Q.value = 0.7;
+            
+            // 2. Low-pass filter (remove harshness above 12kHz)
+            const lowPassFilter = audioContext.createBiquadFilter();
+            lowPassFilter.type = 'lowpass';
+            lowPassFilter.frequency.value = 12000;
+            lowPassFilter.Q.value = 0.7;
+            
+            // 3. Presence boost (around 3-5kHz for clarity)
+            const presenceBoost = audioContext.createBiquadFilter();
+            presenceBoost.type = 'peaking';
+            presenceBoost.frequency.value = 4000;
+            presenceBoost.Q.value = 1.0;
+            presenceBoost.gain.value = 3; // +3dB boost
+            
+            // 4. Warmth boost (around 200Hz)
+            const warmthBoost = audioContext.createBiquadFilter();
+            warmthBoost.type = 'peaking';
+            warmthBoost.frequency.value = 200;
+            warmthBoost.Q.value = 0.8;
+            warmthBoost.gain.value = 2; // +2dB boost
+            
+            // 5. De-esser (reduce sibilance around 6-8kHz)
+            const deEsser = audioContext.createBiquadFilter();
+            deEsser.type = 'peaking';
+            deEsser.frequency.value = 7000;
+            deEsser.Q.value = 1.5;
+            deEsser.gain.value = -4; // -4dB cut
+            
+            // 6. Compressor (dynamic range control)
+            const compressor = audioContext.createDynamicsCompressor();
+            compressor.threshold.value = -24; // Start compressing at -24dB
+            compressor.knee.value = 10; // Smooth compression
+            compressor.ratio.value = 4; // 4:1 ratio
+            compressor.attack.value = 0.003; // 3ms attack
+            compressor.release.value = 0.25; // 250ms release
+            
+            // 7. Output gain
+            const outputGain = audioContext.createGain();
+            outputGain.gain.value = 1.5; // Boost overall level
+            
+            // Connect the chain
+            source
+                .connect(highPassFilter)
+                .connect(lowPassFilter)
+                .connect(warmthBoost)
+                .connect(presenceBoost)
+                .connect(deEsser)
+                .connect(compressor)
+                .connect(outputGain);
+            
+            // Create destination stream
+            const destination = audioContext.createMediaStreamDestination();
+            outputGain.connect(destination);
+            
+            // Return stream with processed audio + original video
+            const processedAudioTrack = destination.stream.getAudioTracks()[0];
+            const videoTrack = inputStream.getVideoTracks()[0];
+            
+            return new MediaStream([videoTrack, processedAudioTrack]);
+        }
+
+        function renderLoop() {
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                animationFrame = requestAnimationFrame(renderLoop);
+                return;
+            }
+
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw mirrored video
+            tempCtx.save();
+            tempCtx.scale(-1, 1);
+            tempCtx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+            tempCtx.restore();
+
+            // Apply RGB split
+            const offset = VHS_SETTINGS.rgbSplit;
+            const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+            const newImageData = tempCtx.createImageData(canvas.width, canvas.height);
+            const newPixels = newImageData.data;
+
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+
+                    const redX = Math.max(0, Math.min(canvas.width - 1, x - offset));
+                    const redI = (y * canvas.width + redX) * 4;
+                    newPixels[i] = pixels[redI];
+
+                    newPixels[i + 1] = pixels[i + 1];
+
+                    const blueX = Math.max(0, Math.min(canvas.width - 1, x + offset));
+                    const blueI = (y * canvas.width + blueX) * 4;
+                    newPixels[i + 2] = pixels[blueI + 2];
+
+                    newPixels[i + 3] = pixels[i + 3];
+                }
+            }
+
+            tempCtx.putImageData(newImageData, 0, 0);
+
+            // Apply filters
+            ctx.filter = `brightness(${VHS_SETTINGS.brightness}) contrast(${VHS_SETTINGS.contrast}) saturate(${VHS_SETTINGS.saturation})`;
+            ctx.drawImage(tempCanvas, 0, 0);
+            ctx.filter = 'none';
+
+            // Draw scanlines directly on canvas
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            for (let y = 0; y < canvas.height; y += 4) {
+                ctx.fillRect(0, y + 2, canvas.width, 2);
+            }
+
+            // Add noise texture
+            const noiseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const noisePixels = noiseData.data;
+            for (let i = 0; i < noisePixels.length; i += 4) {
+                if (Math.random() > 0.95) {
+                    const noise = Math.random() * 50;
+                    noisePixels[i] += noise;
+                    noisePixels[i + 1] += noise;
+                    noisePixels[i + 2] += noise;
+                }
+            }
+            ctx.putImageData(noiseData, 0, 0);
+
+            // Add tracking line (moves down slowly)
+            const trackingY = (Date.now() / 20) % canvas.height;
+            const gradient = ctx.createLinearGradient(0, trackingY - 25, 0, trackingY + 25);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, trackingY - 25, canvas.width, 50);
+
+            animationFrame = requestAnimationFrame(renderLoop);
+        }
+
+        async function handleRecord() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        async function startRecording() {
+            // Show countdown
+            const countdownOverlay = document.getElementById('countdownOverlay');
+            const countdownText = document.getElementById('countdownText');
+            
+            countdownOverlay.classList.add('active');
+            recordBtn.disabled = true;
+
+            // Countdown 3, 2, 1
+            for (let i = 3; i > 0; i--) {
+                countdownText.textContent = i;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            countdownOverlay.classList.remove('active');
+
+            // Start recording
+            isRecording = true;
+            recordedChunks = [];
+            recordingStartTime = Date.now();
+
+            // Show REC indicator and timer
+            document.getElementById('recIndicator').classList.add('active');
+            document.getElementById('timer').classList.add('active');
+
+            // Update button
+            recordBtn.textContent = '■ STOP';
+            recordBtn.classList.add('stop');
+            recordBtn.disabled = false;
+
+            // Start timer
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+
+            // Create MediaRecorder from canvas stream
+            const canvasStream = canvas.captureStream(30); // 30 FPS
+            
+            // Add processed audio
+            const audioTrack = processedStream.getAudioTracks()[0];
+            if (audioTrack) {
+                canvasStream.addTrack(audioTrack);
+            }
+
+            // Create recorder
+            const options = { 
+                mimeType: 'video/webm;codecs=vp9',
+                videoBitsPerSecond: 5000000 // High quality (5 Mbps)
+            };
+
+            try {
+                mediaRecorder = new MediaRecorder(canvasStream, options);
+            } catch (e) {
+                // Fallback to default codec
+                mediaRecorder = new MediaRecorder(canvasStream);
+            }
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                downloadVideo();
+            };
+
+            mediaRecorder.start();
+
+            // Auto-stop after 30 seconds
+            setTimeout(() => {
+                if (isRecording) {
+                    stopRecording();
+                }
+            }, MAX_DURATION);
+        }
+
+        function updateTimer() {
+            const elapsed = Date.now() - recordingStartTime;
+            const seconds = Math.floor(elapsed / 1000);
+            const remaining = Math.max(0, 30 - seconds);
+            
+            document.getElementById('timer').textContent = String(remaining).padStart(2, '0');
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+
+            isRecording = false;
+            
+            // Clear timer
+            clearInterval(timerInterval);
+
+            // Hide indicators
+            document.getElementById('recIndicator').classList.remove('active');
+            document.getElementById('timer').classList.remove('active');
+
+            // Stop MediaRecorder
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+
+            // Reset button
+            recordBtn.textContent = '● REC';
+            recordBtn.classList.remove('stop');
+            recordBtn.disabled = true;
+
+            // Show processing message
+            loadingMessage.textContent = 'PROCESSING VIDEO...';
+            loadingMessage.classList.remove('hidden');
+        }
+
+        function downloadVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            
+            // Convert to downloadable URL
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `vhs-recording-${Date.now()}.webm`;
+            
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                // Hide processing message and re-enable recording
+                loadingMessage.classList.add('hidden');
+                recordBtn.disabled = false;
+            }, 100);
+        }
+    </script>
+</body>
+</html>
